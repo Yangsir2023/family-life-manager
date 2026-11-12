@@ -1389,6 +1389,7 @@
     render: async function (el) {
       var w = ws();
       var s = await BIZ.summary(w, F.today());
+      var ms = await BIZ.monthlyStats();
       var over = s.weekActual > s.budget;
 
       var html = '';
@@ -1455,6 +1456,58 @@
         '<div class="card">' + UI.bars(s.trend.map(function (t) {
           return { label: t.label, value: t.amount, isToday: t.isCurrent };
         }), Math.max(s.maxTrend, 1), '') + '</div></div>';
+
+      // 月统计消费金额
+      var deltaCls = ms.delta > 0 ? 'up' : (ms.delta < 0 ? 'down' : 'flat');
+      var deltaTxt = ms.delta === 0
+        ? '与上月持平'
+        : (ms.delta > 0 ? '本月比上月多花 ' + money(ms.delta) : '本月比上月少花 ' + money(-ms.delta));
+      html += '<div class="px mt-l"><div class="card-hd"><div class="card-hd-t">' +
+        icon('calendar', 'brand', 'icon-md') + '月统计消费金额</div>' +
+        '<span class="t-xs muted">' + ms.curKey + '</span></div>' +
+        '<div class="row-between" style="align-items:flex-end">' +
+          '<div><div class="t-xs muted">本月累计</div>' +
+            '<div class="amount-lg" style="color:var(--price)">' + money(ms.curTotal) + '</div></div>' +
+          '<div style="text-align:right"><div class="t-xs muted">记账笔数</div>' +
+            '<div class="num" style="font-size:19px">' + ms.curCount + ' 笔</div></div>' +
+        '</div>' +
+        (ms.prevTotal > 0 ? '<div class="t-xs ' + deltaCls + ' mt-s">' + deltaTxt +
+            (ms.rate ? '（' + (ms.rate > 0 ? '+' : '') + ms.rate + '%）' : '') + '</div>' : '') +
+      '</div>';
+
+      // 近 6 个月走势
+      html += '<div class="px mt-l"><div class="card-hd"><div class="card-hd-t">' +
+        icon('trend-up', 'brand', 'icon-md') + '近 6 个月走势</div>' +
+        '<span class="t-xs muted">深色 = 本月</span></div>' +
+        '<div class="card">' + UI.bars(ms.months.slice(-6).map(function (m) {
+          return { label: m.label, value: m.total, isToday: m.isCurrent };
+        }), ms.maxMonth, '') +
+        (ms.curTotal <= 0 && ms.prevTotal <= 0 ? '<div class="t-xs muted" style="text-align:center;padding-top:8px">还没有记账，先从采购清单结算开始吧</div>' : '') +
+        '</div></div>';
+
+      // 各月账单
+      html += '<div class="px mt-l"><div class="card-hd"><div class="card-hd-t">' +
+        icon('doc', 'brand', 'icon-md') + '各月账单</div></div><div class="card">' +
+        ms.months.slice().reverse().map(function (m) {
+          var pct = ms.maxMonth ? Math.round(m.total / ms.maxMonth * 100) : 0;
+          return '<div class="detail-row"><span>' + m.year + '年' + m.label +
+              (m.isCurrent ? '（本月）' : '') + '</span>' +
+            '<span class="num" style="color:var(--price)">' + money(m.total) + '</span></div>' +
+            '<div class="share-track" style="margin:6px 0 10px"><span class="share-fill" style="width:' + pct + '%;background:var(--price)"></span></div>';
+        }).join('') + '</div></div>';
+
+      // 本月分类占比
+      if (ms.catList.length) {
+        html += '<div class="px mt-l"><div class="card-hd"><div class="card-hd-t">' +
+          icon('pie', 'brand', 'icon-md') + '本月分类占比</div></div><div class="card">' +
+          ms.catList.map(function (c) {
+            var pct = ms.curTotal ? Math.round(c.amount / ms.curTotal * 100) : 0;
+            return '<div class="share-row"><span class="share-name">' + esc(c.name) + '</span>' +
+              '<span class="share-track"><span class="share-fill" style="width:' + pct + '%;background:' + esc(c.color) + '"></span></span>' +
+              '<span class="share-val"><span class="num">' + money(c.amount) + '</span>' +
+              '<span class="muted t-xs"> ' + pct + '%</span></span></div>';
+          }).join('') + '</div></div>';
+      }
 
       // 消费明细
       html += '<div class="px mt-l"><div class="card-hd"><div class="card-hd-t">' + icon('doc', 'brand', 'icon-md') + '本周消费明细</div>' +

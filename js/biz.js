@@ -1105,6 +1105,92 @@ async function overview() {
   };
 }
 
+/**
+ * 月统计消费金额
+ * 拉全量记录，按自然月（YYYY-MM）聚合：每月总额、笔数、分类占比；
+ * 并返回近 12 个月序列（空月份也占位，便于柱状图连续）、当前月与上月对比。
+ * 金额口径与 summary 一致：优先取记录顶层 totalAmount。
+ */
+async function monthlyStats() {
+  const records = await db.listAll(COL.records, {
+    where: { _openid: ctx.openid },
+    orderBy: { field: 'date', order: 'desc' },
+    max: 500
+  });
+
+  // 按月聚合：key = 'YYYY-MM'
+  const map = {};
+  records.forEach(function (r) {
+    if (!r || !r.date) return;
+    const mk = String(r.date).slice(0, 7);
+    if (!map[mk]) map[mk] = { total: 0, count: 0, cat: {} };
+    const total = sumRecords([r]);
+    map[mk].total = F.round2(map[mk].total + total);
+    map[mk].count += 1;
+    // 分类占比：按 items 的金额占比分摊到各 category
+    const items = r.items || [];
+    if (items.length) {
+      const itemSum = F.sumItems(items);
+      items.forEach(function (it) {
+        const k = it.category || '未分类';
+        const part = itemSum > 0 ? total * (Number(it.amount) || 0) / itemSum : 0;
+        map[mk].cat[k] = F.round2((map[mk].cat[k] || 0) + part);
+      });
+    } else {
+      map[mk].cat['未分类'] = F.round2((map[mk].cat['未分类'] || 0) + total);
+    }
+  });
+
+  const now = new Date();
+  const curKey = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
+
+  // 近 12 个月序列（从 11 个月前到本月，空月份也占位）
+  const months = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+    const m = map[key] || { total: 0, count: 0, cat: {} };
+    months.push({
+      key: key,
+      year: d.getFullYear(),
+      label: (d.getMonth() + 1) + '月',
+      total: m.total,
+      count: m.count,
+      cat: m.cat,
+      isCurrent: key === curKey
+    });
+  }
+
+  const cur = map[curKey] || { total: 0, count: 0, cat: {} };
+  const prev = months.length >= 2 ? (map[months[months.length - 2].key] || { total: 0 }) : { total: 0 };
+  const delta = F.round2(cur.total - prev.total);
+  const rate = prev.total > 0 ? Math.round(delta / prev.total * 100) : (cur.total > 0 ? 100 : 0);
+
+  const catList = Object.keys(cur.cat).map(function (k) {
+    const style = (C.SPEND_CATEGORIES || []).filter(function (c) { return c.key === k; })[0];
+    return {
+      key: k,
+      name: style ? style.name : k,
+      amount: cur.cat[k],
+      color: style ? style.color : (C.CUSTOM_CAT_STYLE ? C.CUSTOM_CAT_STYLE.color : '#8B7BD8')
+    };
+  }).sort(function (a, b) { return b.amount - a.amount; });
+
+  const maxMonth = Math.max.apply(null, months.map(function (m) { return m.total; }).concat([1]));
+
+  return {
+    curKey: curKey,
+    curTotal: cur.total,
+    curCount: cur.count,
+    prevTotal: prev.total,
+    delta: delta,
+    rate: rate,
+    months: months,
+    catList: catList,
+    maxMonth: maxMonth
+  };
+}
+
 window.FFM.biz = {
   init,
   getCtx,
@@ -1153,6 +1239,7 @@ window.FFM.biz = {
   addSpendRecord,
   listWeekSpends,
   // 统计
+  monthlyStats,
   summary,
   overview,
   catOf,
