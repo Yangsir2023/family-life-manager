@@ -110,8 +110,8 @@
       html += '<div class="px mt"><div class="quick-grid">' +
         quickBtn('plus', 'brand', 'brand-l', '录入物价', 'add-price') +
         quickBtn('leaf', 'veg', 'veg-bg', '食材库', 'go-category') +
-        quickBtn('bag', 'aquatic', 'aquatic-bg', '采购清单', 'go-shopping') +
-        quickBtn('chart', 'fruit', 'fruit-bg', '成本统计', 'go-stats') +
+        quickBtn('bag', 'blue', 'aquatic-bg', '采购清单', 'go-shopping') +
+        quickBtn('chart', 'orange', 'fruit-bg', '成本统计', 'go-stats') +
       '</div></div>';
 
       // ---- 本周每日成本
